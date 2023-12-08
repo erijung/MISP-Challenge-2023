@@ -2,7 +2,7 @@ from torch.utils.data import Dataset
 from torchaudio import load
 import os
 
-class GssAudioDataset(Dataset):
+class GssSimulatedAudioDataset(Dataset):
     """
     Dataset for (X: Gss Audio Files, Y: Clean Audio Files)
     """
