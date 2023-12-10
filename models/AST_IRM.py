@@ -1,19 +1,33 @@
-from transformers import AutoProcessor, ASTModel
+from transformers import AutoProcessor, ASTModel, ASTFeatureExtractor
 import torch
 import torchaudio
 from torch import nn
 
 class AST_IRM_Speech_Enhancer(nn.Module):
-    def __init__(self, ast_model = "MIT/ast-finetuned-audioset-10-10-0.4593", encoder_hidden_size = 768, output_size= 768):
-        self.encoder = ASTModel.from_pretrained(ast_model)
-        self.processor = AutoProcessor.from_pretrained(ast_model)
+    def __init__(self, ast_model, processor, encoder_hidden_size = 768, output_size= 768):
+        super().__init__()
+        self.encoder = ast_model
+        self.processor = ASTFeatureExtractor()
         self.decoder = TransformerIRMDecoder(input_size = encoder_hidden_size, output_size=output_size)
-    def forward(x):
-        x = self.processor(waveform, sampling_rate=sampling_rate, return_tensors="pt")
-        out = self.encoder(x).last_hidden_state
+    def forward(self, x):
+        x=x.cpu()
+        if x.size()[1] == 1:
+            x = x.squeeze(1)
+         
+        x=x.numpy()
+        
+        #print(x.size())
+        x = self.processor(x, sampling_rate=16000, return_tensors="pt")
+        print(type(x))
+        if torch.cuda.is_available():
+             x = {key: value.to('cuda') for key, value in x.items()}
+
+        out = self.encoder(**x).last_hidden_state
+        if torch.cuda.is_available():
+            out = out.to('cuda')
         out = self.decoder(out)
 
-
+        return out
 
 
 class TransformerIRMDecoder(nn.Module):
@@ -40,7 +54,8 @@ class TransformerIRMDecoder(nn.Module):
         target_seq_len = encoder_output.shape[0]
         batch_size = encoder_output.shape[1]
         dummy_target = torch.zeros(target_seq_len, batch_size, encoder_output.shape[2])
-
+        if torch.cuda.is_available():
+            dummy_target = dummy_target.to('cuda')
         # Apply the Transformer decoder
         decoder_output = self.transformer_decoder(dummy_target, encoder_output)
 

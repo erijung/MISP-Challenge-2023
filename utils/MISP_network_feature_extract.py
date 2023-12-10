@@ -328,7 +328,7 @@ def batch_short_time_fourier_transform(batch_x, window, n_fft=512, hop_length=16
     
     batch_spectrum = torch.stft(
         input=batch_wave, n_fft=n_fft, hop_length=hop_length, win_length=win_length, window=window,
-        center=False, pad_mode='reflect', normalized=False, onesided=True)
+        center=False, pad_mode='reflect', normalized=False, onesided=True, return_complex=is_complex)
     if not is_complex:
         batch_magnitude = torch.sqrt(batch_spectrum[:, :, :, 0] ** 2 + batch_spectrum[:, :, :, 1] ** 2)
         batch_phase = torch.atan2(batch_spectrum[:, :, :, 1].data, batch_spectrum[:, :, :, 0].data)

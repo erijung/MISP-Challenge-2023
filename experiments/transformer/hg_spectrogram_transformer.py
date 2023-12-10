@@ -45,7 +45,7 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Load your dataset
-    dataset = GssSimulatedAudioDataset()  # Adjust with your dataset
+    dataset = GssSimulatedAudioDataset('/root/autodl-tmp/exp/gss/train/enhanced_wav/', '/root/autodl-tmp/simul-data/label/audio')  # Adjust with your dataset
     dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
 
     # Model initialization
