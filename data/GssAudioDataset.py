@@ -1,6 +1,7 @@
 from torch.utils.data import Dataset
 from torchaudio import load
 import os
+import glob
 
 class GssSimulatedAudioDataset(Dataset):
     """
@@ -39,11 +40,23 @@ class GssSimulatedAudioDataset(Dataset):
 
         # Construct the input and label file path
         audio_file_path = os.path.join(self.data_dir, input_file)
-        label_file_path = os.path.join(self.label_dir, f"{source}_{session}_{timestamps_wav}")
+        label_file_path = os.path.join(self.label_dir, f"{source}-{session}-{timestamps_wav}")
         
         # Load the audio file using torchaudio
         input_waveform, sample_rate = load(audio_file_path)
-        clean_waveform, clean_sample_rate = load(label_file_path)
+        try:
+            clean_waveform, clean_sample_rate = load(label_file_path)
+        except:
+            timestamp1 = timestamps_wav.split('_')[0]
+            # Example usage
+            directory = self.label_dir  # Replace with the path to your directory
+            pattern = f'{source}-{session}-{timestamp1}'  # Replace with your actual pattern
+            files = find_files(directory, pattern)
+
+            for file in files:
+                print(file)
+            label_file_path = os.path.join(self.label_dir, files[0].split('/')[-1])
+            clean_waveform, clean_sample_rate = load(label_file_path)
         assert(sample_rate == clean_sample_rate)
 
         # Apply any specified transforms
@@ -51,7 +64,39 @@ class GssSimulatedAudioDataset(Dataset):
             waveform = self.transform(waveform)
 
         # Return a dictionary containing the waveform and label
-        sample = {'waveform': waveform, 'label': clean_waveform}
+        sample = {'file': self.gss_audio_files[idx], 'waveform': input_waveform, 'label': clean_waveform}
 
         return sample
+
+
+class GssSimulatedAudioSpectrogramDataset(GssSimulatedAudioDataset):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.spec_transform = Spectrogram(n_fft=400)
+
+    def __getitem__(self, idx):
+        sample = super().__getitem__(idx)
+        noisy_waveform = sample['noisy_waveform']
+        clean_waveform = sample['clean_waveform']
+
+        noisy_spec = self.spec_transform(noisy_waveform)
+        clean_spec = self.spec_transform(clean_waveform)
+
+        irm = self.calculate_irm(noisy_spec, clean_spec)
+
+        return {'noisy_waveform': noisy_waveform, 'irm': irm}
+
+    def calculate_irm(self, noisy_spec, clean_spec):
+        noise_spec = noisy_spec - clean_spec
+        irm = clean_spec / (clean_spec + noise_spec + 1e-8)  # Adding a small constant for numerical stability
+        return irm
+
+
+
+def find_files(directory, pattern):
+    # Construct the full pattern
+    full_pattern = f"{directory}/{pattern}*"
+    # Use glob to find files matching the pattern
+    return glob.glob(full_pattern)
+
 
