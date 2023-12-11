@@ -1,5 +1,6 @@
 from torch.utils.data import Dataset
 from torchaudio import load
+import torch
 import os
 import glob
 
@@ -24,9 +25,14 @@ class GssSimulatedAudioDataset(Dataset):
         # has full path as input_dir/{session}_{noise_lvl}db/{session}_{noise_lvl}db-{source}-{timestamp1}_{timestamp2}.wav
         self.gss_audio_files = [os.path.join(root.split('/')[-1], f) for root, sub, flist in os.walk(self.data_dir) for f in flist]
         # print(self.gss_audio_files)
+        # self.gss_audio_files = self.gss_audio_files[:1000]
 
     def __len__(self):
         return len(self.gss_audio_files)
+    
+    def truncate_data(self, samples):
+        self.gss_audio_files.shuffle()
+        self.gss_audio_files = self.gss_audio_files[:samples]
 
     def __getitem__(self, idx):
         # Get base file name
@@ -44,6 +50,7 @@ class GssSimulatedAudioDataset(Dataset):
         
         # Load the audio file using torchaudio
         input_waveform, sample_rate = load(audio_file_path)
+        files = None
         try:
             clean_waveform, clean_sample_rate = load(label_file_path)
         except:
@@ -53,18 +60,24 @@ class GssSimulatedAudioDataset(Dataset):
             pattern = f'{source}-{session}-{timestamp1}'  # Replace with your actual pattern
             files = find_files(directory, pattern)
 
-            for file in files:
-                print(file)
+            # for file in files:
+            #     print(file)
             label_file_path = os.path.join(self.label_dir, files[0].split('/')[-1])
             clean_waveform, clean_sample_rate = load(label_file_path)
         assert(sample_rate == clean_sample_rate)
+        if clean_waveform.shape != input_waveform.shape:
+            max_length = max([input_waveform.shape[1], clean_waveform.shape[1]])
+            # print('padding input with', max_length - input_waveform.shape[1])
+            input_waveform = pad_waveform(input_waveform, max_length)
+            # print('padding target with', max_length - clean_waveform.shape[1])
+            clean_waveform = pad_waveform(clean_waveform, max_length)
 
         # Apply any specified transforms
         if self.transform:
             waveform = self.transform(waveform)
 
         # Return a dictionary containing the waveform and label
-        sample = {'file': self.gss_audio_files[idx], 'waveform': input_waveform, 'label': clean_waveform}
+        sample = {'in_file': self.gss_audio_files[idx], 'waveform': input_waveform, 'label': clean_waveform}
 
         return sample
 
@@ -100,3 +113,10 @@ def find_files(directory, pattern):
     return glob.glob(full_pattern)
 
 
+def pad_waveform(waveform, target_length):
+    padding_amount = target_length - waveform.size(1)
+    if padding_amount > 0:
+        return torch.nn.functional.pad(waveform, (0, padding_amount))
+    return waveform
+def truncate_waveform(waveform, target_length):
+    return waveform[:, :target_length], waveform[:, target_length:]

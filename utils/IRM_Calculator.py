@@ -19,6 +19,28 @@ class IdealMask(nn.Module):
         if self.mask_type in ['irm']:
             # Assuming x has shape [batch, 2, length] where
             # x[:, 0, :] is the mixture and x[:, 1, :] is the clean signal
+            # calculate noise as mixture - clean
+            noise = x[:, 0, :] - x[:, 1, :]
+            # Apply STFT to the mixture and clean signals
+            noise_spectrum = self.stft(noise)  # noise
+            clean_spectrum = self.stft(x[:, 1, :])  # Clean
+            
+            # Compute magnitude squared (power) for both
+            noise_power = torch.abs(noise_spectrum) ** 2
+            clean_power = torch.abs(clean_spectrum) ** 2
+
+            # Calculate the Ideal Ratio Mask
+            # Adding eps for numerical stability
+            irm = torch.sqrt(clean_power / (clean_power + noise_power + eps))
+
+            if irm.shape[-1] == 2:
+                irm = torch.sqrt(irm[:, :, :, 0].pow(2) + irm[:, :, :, 1].pow(2))
+
+            return irm, length
+
+        if self.mask_type in ['irm_approx']:
+            # Assuming x has shape [batch, 2, length] where
+            # x[:, 0, :] is the mixture and x[:, 1, :] is the clean signal
 
             # Apply STFT to the mixture and clean signals
             mixture_spectrum = self.stft(x[:, 0, :])  # Mixture
@@ -32,12 +54,15 @@ class IdealMask(nn.Module):
             # Adding eps for numerical stability
             irm = torch.sqrt(clean_power / (mixture_power + eps) + eps)
 
+            if irm.shape[-1] == 2:
+                irm = torch.sqrt(irm[:, :, :, 0].pow(2) + irm[:, :, :, 1].pow(2))
+
             return irm, length
         else:
             raise NotImplementedError('unknown mask_type')
 
 class ShortTimeFourierTransform(nn.Module):
-    def __init__(self, n_fft, hop_length, win_type='hamming', win_length=None, is_complex=False):
+    def __init__(self, n_fft=512, hop_length=160, win_type='hamming', win_length=None, is_complex=False):
         super(ShortTimeFourierTransform, self).__init__()
         self.n_fft = n_fft
         self.hop_length = hop_length
